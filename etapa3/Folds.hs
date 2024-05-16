@@ -257,20 +257,20 @@ instance Show RegionAST where
         Rectangle 4.0 5.0
 -}
 instance Num RegionAST where
-  fromInteger n = R (Circle (fromInteger n))
+  fromInteger n = fromPoints [(fromInteger n, fromInteger n)]
 
-  negate = R . Complement
+  negate = complement
 
-  (+) = (R .) . Union
+  (+) = union
 
-  (*) = (R .) . Intersection
+  (*) = intersection
 
   {-
     Diferența regiunilor trebuie implementată exclusiv prin alți operatori
     aritmetici pe regiuni, definiți în instanța curentă.
   -}
 
-  region1 - region2 = region1 * (negate region2)
+  region1 - region2 = region1 * complement region2
 
 {-
     *** TODO ***
