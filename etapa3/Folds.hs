@@ -487,7 +487,12 @@ basicTransformationCount = foldTransformationAST combiner
 
     Cum ajută evaluarea leneșă dacă dorim să accesăm doar o componentă a perechii?
 
-    Răspuns: ...................
+    Răspuns: Evaluarea leneșă ne permite să accesăm doar o componentă a perechii
+    deoarece, în momentul în care evaluăm doar o componentă, Haskell nu va evalua
+    și cealaltă componentă. Astfel, putem accesa doar componenta dorită fără a
+    evalua și cealaltă componentă, ceea ce ne ajută să evităm evaluarea inutilă
+    a codului și să obținem o performanță mai bună a programului.
+
 
     Exemple:
 
