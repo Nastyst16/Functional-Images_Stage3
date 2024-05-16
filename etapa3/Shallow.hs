@@ -49,7 +49,7 @@ type Transformation = Point -> Point
     False
 -}
 inside :: Point -> Region -> Bool
-inside = undefined
+inside = flip ($)
 
 {-
     *** TODO ***
@@ -75,7 +75,9 @@ inside = undefined
     False
 -}
 fromPoints :: [Point] -> Region
-fromPoints = undefined
+-- fromPoints pointList point = point `elem` pointList
+-- variant point-free
+fromPoints = flip elem
 
 {-
     *** TODO ***
@@ -96,11 +98,11 @@ fromPoints = undefined
     > rectangle 2 2 (1, -1)
     True
 
-    > rectangle 2 2 (2, 2)  
+    > rectangle 2 2 (2, 2)
     False
 -}
 rectangle :: Float -> Float -> Region
-rectangle width height = undefined
+rectangle width height = \(x, y) -> abs x <= width / 2 && abs y <= height / 2
 
 {-
     *** TODO ***
@@ -115,15 +117,15 @@ rectangle width height = undefined
 
     > circle 1 (1, 0)
     True
-    
+
     > circle 1 (0, 1)
     True
-    
+
     > circle 1 (1, 1)
     False
 -}
 circle :: Float -> Region
-circle radius = undefined
+circle radius = \(x, y) -> x^2 + y^2 <= radius^2
 
 {-
     *** TODO ***
@@ -165,7 +167,7 @@ circle radius = undefined
     '*' pe orizontală și pe verticală poate fi înțeleasă dacă vă gândiți
     la coordonatele vizate, -1, 0 și 1, în toate combinațiile (x, y).
 
-    > printPlot 2 2 $ circle 2     
+    > printPlot 2 2 $ circle 2
     ..*..
     .***.
     *****
@@ -173,7 +175,15 @@ circle radius = undefined
     ..*..
 -}
 plot :: Int -> Int -> Region -> String
-plot width height region = undefined
+plot width height region =
+    concat [if inside (fromIntegral x, fromIntegral y) region
+                then if x == width && y /= -height
+                    then "*\n"
+                    else "*"
+                    else if x == width && y /= -height
+                        then ".\n"
+                        else "."
+                        | y <- [height, height - 1..(-height)], x <- [-width..width]]
 
 {-
     Utilizați această funcție pentru vizualizarea diagramelor,
@@ -206,10 +216,10 @@ printPlot width height region = putStrLn $ plot width height region
     5.0
 -}
 promoteUnary :: (a -> b) -> Pointed a -> Pointed b
-promoteUnary = undefined
+promoteUnary = (.)
 
 promoteBinary :: (a -> b -> c) -> Pointed a -> Pointed b -> Pointed c
-promoteBinary f pointed1 pointed2 point = undefined
+promoteBinary f pointed1 pointed2 point = f (pointed1 point) (pointed2 point)
 
 {-
     *** TODO ***
@@ -244,13 +254,15 @@ promoteBinary f pointed1 pointed2 point = undefined
     .....
 -}
 complement :: Region -> Region
-complement = undefined
+complement = promoteUnary not
 
 union :: Region -> Region -> Region
-union = undefined
+union = promoteBinary (||)
 
 intersection :: Region -> Region -> Region
-intersection = undefined
+intersection = promoteBinary (&&)
+
+
 
 {-
     *** TODO ***
@@ -270,7 +282,7 @@ intersection = undefined
     (0.0,0.0)
 -}
 translation :: Float -> Float -> Transformation
-translation tx ty = undefined
+translation tx ty = \(x, y) -> (x - tx, y - ty)
 
 {-
     *** TODO ***
@@ -285,7 +297,8 @@ translation tx ty = undefined
     (1.0,1.0)
 -}
 scaling :: Float -> Transformation
-scaling factor = undefined
+scaling factor = \(x, y) -> (x / factor, y / factor)
+
 
 {-
     *** TODO ***
@@ -304,7 +317,7 @@ scaling factor = undefined
     ..***
     ...*.
 
-    > printPlot 2 2 $ applyTransformation (scaling 0.5) (circle 2)    
+    > printPlot 2 2 $ applyTransformation (scaling 0.5) (circle 2)
     .....
     ..*..
     .***.
@@ -312,7 +325,7 @@ scaling factor = undefined
     .....
 -}
 applyTransformation :: Transformation -> Region -> Region
-applyTransformation = undefined
+applyTransformation = flip (.)
 
 {-
     *** TODO ***
@@ -340,7 +353,7 @@ applyTransformation = undefined
         applyTransformation (scaling 0.5) (circle 2)
 -}
 combineTransformations :: [Transformation] -> Transformation
-combineTransformations = undefined
+combineTransformations = foldl (flip (.)) id
 
 {-
     *** TODO ***
@@ -369,7 +382,8 @@ combineTransformations = undefined
     ...............*.....*.....*...
     ...............................
 
-    Răspuns: ...............
+    Răspuns: Este utila evaluarea lenesa, deoarece functia circles genereaza regiunea doar pana cand este nevoie,
+             adica pana cand gasim punctul dorit. Odata gasit ne oprim -> eficienta maxima.
 -}
 circles :: Int -> Region
 circles n
@@ -384,7 +398,10 @@ circles n
     Explicați la prezentare cum se comportă reuniunea infinită de mai jos
     când se verifică apartenența unui punct care NU aparține regiunii.
 
-    Răspuns: ...............
+    Răspuns: Avand in vedere ca functia "infiniteCircles" creeaza cercuri la infinit,
+             in momentul in care dorim verificarea apartenentei a unui punct care NU apartine regiunii
+             functia de verificare va rula la infinit, la fel si cea de creeare a cercurilor.
+
 -}
 infiniteCircles :: Region
 infiniteCircles = union (circle 2)
@@ -424,7 +441,12 @@ infiniteCircles = union (circle 2)
     a extinde implementarea de mai sus.
 -}
 bfs :: (Ord a) => a -> (a -> [a]) -> [(a, Int)]
-bfs start expand = undefined
+bfs start expand = bfs' [] [(start, 0)]
+  where
+    bfs' _ [] = []
+    bfs' vizitat ((state, level) : restGraf)
+      | elem state vizitat = bfs' vizitat restGraf
+      | otherwise = (state, level) : bfs' (state:vizitat) (restGraf ++ [(y, level + 1) | y <- expand state])
 
 {-
     *** TODO BONUS ***
@@ -455,4 +477,6 @@ bfs start expand = undefined
     .........................................
 -}
 regionAvoidingBfs :: Point -> Region -> [(Point, Int)]
-regionAvoidingBfs start region = undefined
+regionAvoidingBfs start region = bfs start (expand region)
+  where
+    expand region (x, y) = filter (not . flip inside region) [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]

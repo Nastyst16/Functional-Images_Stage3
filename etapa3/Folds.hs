@@ -124,7 +124,7 @@ applyTransformation transformation region = R $ Transform transformation region
     * o scalare cu factorul f devine "*<f>"
     * o transformare compusă este reprezentată ca lista Haskell
       a transformărilor constitutive.
-    
+
     Hint: când faceți pattern matching conform noii definiții a tipului
     TransformationAST în termenii constructorului de tip TransformationShape,
     nu uitați constructorul de date T.
@@ -140,7 +140,10 @@ applyTransformation transformation region = R $ Transform transformation region
     [+(1.0,2.0),*<3.0>,[*<4.0>,+(5.0,6.0)]]
 -}
 instance Show TransformationAST where
-    show (T transformation) = undefined
+  show (T transformation) = case transformation of
+    Translation tx ty -> "+(" ++ show tx ++ "," ++ show ty ++ ")"
+    Scaling f -> "*<" ++ show f ++ ">"
+    Combine transformations -> show transformations
 
 {-
     *** TODO ***
@@ -155,9 +158,9 @@ instance Show TransformationAST where
     * un nod Complement este reprezentat prin caracterul '~'
     * un nod Union este reprezentat prin caracterul '+'
     * un nod Intersection este reprezentat prin caracterul '*'.
-    
+
     Hints:
-    
+
     * Când faceți pattern matching conform noii definiții a tipului RegionAST
       în termenii constructorului de tip RegionShape, nu uitați constructorul
       de date R.
@@ -181,8 +184,19 @@ instance Show TransformationAST where
           Circle 3.0
         Rectangle 4.0 5.0
 -}
+
 instance Show RegionAST where
-    show = undefined
+  show = foldRegionAST showRegion
+    where
+      showRegion :: RegionCombiner String
+      showRegion region = case region of
+        FromPoints points -> "FromPoints " ++ show points
+        Rectangle w h -> "Rectangle " ++ show w ++ " " ++ show h
+        Circle r -> "Circle " ++ show r
+        Complement region -> "~\n" ++ replicate 4 ' ' ++ region
+        Union region1 region2 -> "+\n" ++ replicate 2 ' ' ++ region1 ++ "\n" ++ replicate 2 ' ' ++ region2
+        Intersection region1 region2 -> "*\n" ++ replicate 4 ' ' ++ region1 ++ "\n" ++ replicate 4 ' ' ++ region2
+        Transform transformation region -> show transformation ++ "\n" ++ replicate 6 ' ' ++ region
 
 {-
     *** TODO ***
@@ -200,7 +214,7 @@ instance Show RegionAST where
     ea poate fi implementată ca intersecție cu complementul scăzătorului.
 
     Constrângeri:
-    
+
     * negate, (+) și (*) trebui definite point-free
     * (-) trebuie implementat exclusiv prin alți operatori aritmetici pe regiuni.
 
@@ -214,7 +228,7 @@ instance Show RegionAST where
 
     Exemple:
 
-    > fromInteger 1 :: RegionAST   
+    > fromInteger 1 :: RegionAST
     FromPoints [(1.0,1.0)]
 
     > 1 :: RegionAST  -- aici se invocă implicit fromInteger pe 1
@@ -227,7 +241,7 @@ instance Show RegionAST where
     ~
       FromPoints [(1.0,1.0)]
 
-    > circle 3 - rectangle 4 5        
+    > circle 3 - rectangle 4 5
     *
       Circle 3.0
       ~
@@ -243,19 +257,20 @@ instance Show RegionAST where
         Rectangle 4.0 5.0
 -}
 instance Num RegionAST where
-    fromInteger n = undefined
-    
-    negate = undefined
+  fromInteger n = R (Circle (fromInteger n))
 
-    (+) = undefined
+  negate = R . Complement
 
-    (*) = undefined
+  (+) = (R .) . Union
 
-    {-
-        Diferența regiunilor trebuie implementată exclusiv prin alți operatori
-        aritmetici pe regiuni, definiți în instanța curentă.
-    -}
-    region1 - region2 = undefined
+  (*) = (R .) . Intersection
+
+  {-
+    Diferența regiunilor trebuie implementată exclusiv prin alți operatori
+    aritmetici pe regiuni, definiți în instanța curentă.
+  -}
+
+  region1 - region2 = region1 * (negate region2)
 
 {-
     *** TODO ***
@@ -288,7 +303,10 @@ instance Num RegionAST where
 -}
 instance Functor TransformationShape where
     -- fmap :: (a -> b) -> TransformationShape a -> TransformationShape b
-    fmap f transformation = undefined
+    fmap f transformation = case transformation of
+        Translation tx ty -> Translation tx ty
+        Scaling factor -> Scaling factor
+        Combine transformations -> Combine $ map f transformations
 
 {-
     *** TODO ***
@@ -315,7 +333,14 @@ instance Functor TransformationShape where
 -}
 instance Functor RegionShape where
     -- fmap :: (a -> b) -> RegionShape a -> RegionShape b
-    fmap f region = undefined
+    fmap f region = case region of
+        FromPoints points -> FromPoints points
+        Rectangle w h -> Rectangle w h
+        Circle r -> Circle r
+        Complement region -> Complement $ f region
+        Union region1 region2 -> Union (f region1) (f region2)
+        Intersection region1 region2 -> Intersection (f region1) (f region2)
+        Transform transformation region -> Transform transformation $ f region
 
 {-
     Tipul (TransformationCombiner a) include funcții care pot combina câmpurile
@@ -339,14 +364,14 @@ type RegionCombiner a = RegionShape a -> a
     TransformationAST, respectiv RegionAST, la o singură valoare de tipul a,
     pornind de la combiner-e cu tipurile (TransformationCombiner a), respectiv
     (RegionCombiner a).
-    
+
     Pentru definirea unei funcționale fold...AST, se urmează doi pași:
 
     1. Se reduc mai întâi subarborii folosind recursiv funcționala fold...AST,
        pentru a înlocui subarborii de tipul ...AST cu acumulatori de tipul a.
     2. Se aplică combiner-ul pe rezultat, pentru a combina acumulatorii interni
        de tipul a într-o singură valoare de tipul a.
-    
+
     Cele două funcționale vor avea câte o unică definiție (nu este necesar
     să faceți pattern matching pe forma parametrilor, e.g. translație,
     complement etc.), întrucât forma acestora este gesionată de combiner-ul
@@ -376,10 +401,10 @@ type RegionCombiner a = RegionShape a -> a
     intermediare într-un nou șir.
 -}
 foldTransformationAST :: TransformationCombiner a -> TransformationAST -> a
-foldTransformationAST f (T transformation) = undefined
+foldTransformationAST f (T transformation) = f (fmap (foldTransformationAST f) transformation)
 
 foldRegionAST :: RegionCombiner a -> RegionAST -> a
-foldRegionAST f (R region) = undefined
+foldRegionAST f (R region) = f (fmap (foldRegionAST f) region)
 
 {-
     *** TODO ***
@@ -389,7 +414,7 @@ foldRegionAST f (R region) = undefined
     prefixându-le cu „S.”.
 
     Hints:
-    
+
     * Tipul (TransformationCombiner Transformation) se expandează la tipul
       (TransformationShape Transformation -> Transformation). Prin urmare,
       puteți asuma că, în cazul constructorului Combine, câmpul cu tipul
@@ -402,7 +427,10 @@ toTransformation :: TransformationAST -> Transformation
 toTransformation = foldTransformationAST combiner
   where
     combiner :: TransformationCombiner Transformation
-    combiner transformation = undefined
+    combiner transformation = case transformation of
+      Translation tx ty -> S.translation tx ty
+      Scaling factor -> S.scaling factor
+      Combine transformations -> S.combineTransformations transformations
 
 {-
     *** TODO ***
@@ -437,7 +465,10 @@ basicTransformationCount :: TransformationAST -> Int
 basicTransformationCount = foldTransformationAST combiner
   where
     combiner :: TransformationCombiner Int
-    combiner transformation = undefined
+    combiner transformation = case transformation of
+      Translation _ _ -> 1
+      Scaling _ -> 1
+      Combine subASTs -> sum subASTs
 
 {-
     *** TODO ***
@@ -455,7 +486,7 @@ basicTransformationCount = foldTransformationAST combiner
     Constrângeri: evitați duplicarea codului.
 
     Cum ajută evaluarea leneșă dacă dorim să accesăm doar o componentă a perechii?
-    
+
     Răspuns: ...................
 
     Exemple:
@@ -466,7 +497,7 @@ basicTransformationCount = foldTransformationAST combiner
                       [ translation 1 2
                       , combineTransformations [ translation 3 4
                                                , scaling 2
-                                               ]  
+                                               ]
                       , scaling 3
                       ])
                   (complement
@@ -482,7 +513,14 @@ basicEntityCount :: RegionAST -> (Int, Int)
 basicEntityCount = foldRegionAST combiner
   where
     combiner :: RegionCombiner (Int, Int)
-    combiner region = undefined
+    combiner region = case region of
+      FromPoints _ -> (1, 0)
+      Rectangle _ _ -> (1, 0)
+      Circle _ -> (1, 0)
+      Complement (regionCount, transformationCount) -> (regionCount, transformationCount)
+      Union (regionCount1, transformationCount1) (regionCount2, transformationCount2) -> (regionCount1 + regionCount2, transformationCount1 + transformationCount2)
+      Intersection (regionCount1, transformationCount1) (regionCount2, transformationCount2) -> (regionCount1 + regionCount2, transformationCount1 + transformationCount2)
+      Transform transformation (regionCount, transformationCount) -> (regionCount, transformationCount + basicTransformationCount transformation)
 
 {-
     *** TODO ***
@@ -518,4 +556,4 @@ basicEntityCount = foldRegionAST combiner
     helper' poate fi rescrisă ca o reducere.
 -}
 showFoldFlag :: Bool
-showFoldFlag = False
+showFoldFlag = True
