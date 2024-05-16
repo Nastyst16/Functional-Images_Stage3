@@ -141,9 +141,13 @@ applyTransformation transformation region = R $ Transform transformation region
 -}
 instance Show TransformationAST where
   show (T transformation) = case transformation of
+    -- Pentru o translatie, afiseaza o reprezentare in formatul "+(tx,ty)".
     Translation tx ty -> "+(" ++ show tx ++ "," ++ show ty ++ ")"
+    -- Pentru o scalare, afiseaza o reprezentare in formatul "*<f>".
     Scaling f -> "*<" ++ show f ++ ">"
+    -- Pentru o combinatie de transformari, afiseaza transformarile combinate.
     Combine transformations -> show transformations
+
 
 {-
     *** TODO ***
@@ -185,18 +189,33 @@ instance Show TransformationAST where
         Rectangle 4.0 5.0
 -}
 
+-- Assume necessary imports and data definitions are here
+
 instance Show RegionAST where
-  show = foldRegionAST showRegion
+  show region = showHelper region 0
     where
-      showRegion :: RegionCombiner String
-      showRegion region = case region of
-        FromPoints points -> "FromPoints " ++ show points
-        Rectangle w h -> "Rectangle " ++ show w ++ " " ++ show h
-        Circle r -> "Circle " ++ show r
-        Complement region -> "~\n" ++ replicate 4 ' ' ++ region
-        Union region1 region2 -> "+\n" ++ replicate 2 ' ' ++ region1 ++ "\n" ++ replicate 2 ' ' ++ region2
-        Intersection region1 region2 -> "*\n" ++ replicate 4 ' ' ++ region1 ++ "\n" ++ replicate 4 ' ' ++ region2
-        Transform transformation region -> show transformation ++ "\n" ++ replicate 6 ' ' ++ region
+      -- Functie ajutatoare pentru a converti un RegionAST intr-un string cu un nivel specific de indentare
+      showHelper :: RegionAST -> Int -> String
+      showHelper (R regionShape) level = case regionShape of
+        -- Daca forma regiunii este FromPoints, afiseaza punctele
+        FromPoints points -> indent level ++ "FromPoints " ++ show points
+        -- Daca forma regiunii este un dreptunghi (Rectangle), afiseaza latimea si inaltimea
+        Rectangle width height -> indent level ++ "Rectangle " ++ show width ++ " " ++ show height
+        -- Daca forma regiunii este un cerc (Circle), afiseaza raza
+        Circle radius -> indent level ++ "Circle " ++ show radius
+        -- Daca forma regiunii este Complement, afiseaza un ~ si apoi sub-regiunea cu indentare crescuta
+        Complement subRegion -> indent level ++ "~\n" ++ showHelper subRegion (level + 2)
+        -- Daca forma regiunii este Union, afiseaza un + si apoi ambele sub-regiuni cu indentare crescuta
+        Union region1 region2 -> indent level ++ "+\n" ++ showHelper region1 (level + 2) ++ "\n" ++ showHelper region2 (level + 2)
+        -- Daca forma regiunii este Intersection, afiseaza un * si apoi ambele sub-regiuni cu indentare crescuta
+        Intersection region1 region2 -> indent level ++ "*\n" ++ showHelper region1 (level + 2) ++ "\n" ++ showHelper region2 (level + 2)
+        -- Daca forma regiunii este Transform, afiseaza transformarea si apoi sub-regiunea cu indentare crescuta
+        Transform transformation subRegion -> indent level ++ show transformation ++ "\n" ++ showHelper subRegion (level + 2)
+      
+      -- Functie pentru a crea un string de indentare cu numarul specificat de spatii
+      indent :: Int -> String
+      indent level = replicate level ' '
+
 
 {-
     *** TODO ***
@@ -270,7 +289,7 @@ instance Num RegionAST where
     aritmetici pe regiuni, definiți în instanța curentă.
   -}
 
-  region1 - region2 = region1 * complement region2
+  region1 - region2 = region1 * negate region2
 
 {-
     *** TODO ***
@@ -302,11 +321,15 @@ instance Num RegionAST where
     are un câmp de tipul [a], și nu de tipul [TransformationAST].
 -}
 instance Functor TransformationShape where
-    -- fmap :: (a -> b) -> TransformationShape a -> TransformationShape b
+    -- Defineste functia fmap care aplica o functie f asupra unui TransformationShape
     fmap f transformation = case transformation of
+        -- Daca transformarea este Translation, nu facem nicio modificare
         Translation tx ty -> Translation tx ty
+        -- Daca transformarea este Scaling, nu facem nicio modificare
         Scaling factor -> Scaling factor
+        -- Daca transformarea este Combine, aplicam functia f pe fiecare transformare din lista
         Combine transformations -> Combine $ map f transformations
+
 
 {-
     *** TODO ***
@@ -332,15 +355,23 @@ instance Functor TransformationShape where
     câmpuri de tipul a, și nu de tipul RegionAST.
 -}
 instance Functor RegionShape where
-    -- fmap :: (a -> b) -> RegionShape a -> RegionShape b
+    -- Defineste functia fmap care aplica o functie f asupra unui RegionShape
     fmap f region = case region of
+        -- Daca regiunea este FromPoints, nu facem nicio modificare
         FromPoints points -> FromPoints points
+        -- Daca regiunea este Rectangle, nu facem nicio modificare
         Rectangle w h -> Rectangle w h
+        -- Daca regiunea este Circle, nu facem nicio modificare
         Circle r -> Circle r
+        -- Daca regiunea este Complement, aplicam functia f asupra sub-regiunii
         Complement region -> Complement $ f region
+        -- Daca regiunea este Union, aplicam functia f asupra ambelor sub-regiuni
         Union region1 region2 -> Union (f region1) (f region2)
+        -- Daca regiunea este Intersection, aplicam functia f asupra ambelor sub-regiuni
         Intersection region1 region2 -> Intersection (f region1) (f region2)
+        -- Daca regiunea este Transform, aplicam functia f asupra sub-regiunii, dar lasam transformarea neschimbata
         Transform transformation region -> Transform transformation $ f region
+
 
 {-
     Tipul (TransformationCombiner a) include funcții care pot combina câmpurile
@@ -426,11 +457,16 @@ foldRegionAST f (R region) = f (fmap (foldRegionAST f) region)
 toTransformation :: TransformationAST -> Transformation
 toTransformation = foldTransformationAST combiner
   where
+    -- Defineste un combiner pentru a transforma fiecare TransformationAST intr-un Transformation
     combiner :: TransformationCombiner Transformation
     combiner transformation = case transformation of
+      -- Daca transformarea este Translation, foloseste functia S.translation
       Translation tx ty -> S.translation tx ty
+      -- Daca transformarea este Scaling, foloseste functia S.scaling
       Scaling factor -> S.scaling factor
+      -- Daca transformarea este Combine, foloseste functia S.combineTransformations
       Combine transformations -> S.combineTransformations transformations
+
 
 {-
     *** TODO ***
@@ -464,11 +500,16 @@ toTransformation = foldTransformationAST combiner
 basicTransformationCount :: TransformationAST -> Int
 basicTransformationCount = foldTransformationAST combiner
   where
+    -- Defineste un combiner pentru a numara transformarile de baza intr-un TransformationAST
     combiner :: TransformationCombiner Int
     combiner transformation = case transformation of
+      -- Daca transformarea este Translation, returneaza 1
       Translation _ _ -> 1
+      -- Daca transformarea este Scaling, returneaza 1
       Scaling _ -> 1
+      -- Daca transformarea este Combine, returneaza suma valorilor subAST-urilor
       Combine subASTs -> sum subASTs
+
 
 {-
     *** TODO ***
@@ -514,17 +555,26 @@ basicTransformationCount = foldTransformationAST combiner
 
     Avem 2 regiuni elementare și 7 transformări elementare.
 -}
+-- Defineste o functie care calculeaza numarul de entitati de baza dintr-un AST pentru regiuni.
 basicEntityCount :: RegionAST -> (Int, Int)
 basicEntityCount = foldRegionAST combiner
   where
+    -- Defineste un combiner pentru a procesa fiecare regiune.
     combiner :: RegionCombiner (Int, Int)
     combiner region = case region of
+      -- Daca regiunea este definita din puncte, adauga o entitate.
       FromPoints _ -> (1, 0)
+      -- Daca regiunea este un dreptunghi, adauga o entitate.
       Rectangle _ _ -> (1, 0)
+      -- Daca regiunea este un cerc, adauga o entitate.
       Circle _ -> (1, 0)
+      -- Pentru complement, nu schimba numarul de entitati.
       Complement (regionCount, transformationCount) -> (regionCount, transformationCount)
+      -- Pentru uniune, aduna numarul de entitati si transformari din cele doua sub-regiuni.
       Union (regionCount1, transformationCount1) (regionCount2, transformationCount2) -> (regionCount1 + regionCount2, transformationCount1 + transformationCount2)
+      -- Pentru intersectie, aduna numarul de entitati si transformari din cele doua sub-regiuni.
       Intersection (regionCount1, transformationCount1) (regionCount2, transformationCount2) -> (regionCount1 + regionCount2, transformationCount1 + transformationCount2)
+      -- Pentru transformare, adauga numarul de transformari si mentine numarul de entitati.
       Transform transformation (regionCount, transformationCount) -> (regionCount, transformationCount + basicTransformationCount transformation)
 
 {-
